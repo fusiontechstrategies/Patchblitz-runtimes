@@ -1,5 +1,9 @@
 # PatchBlitz runtimes
 
+<p align="center">
+  <img src=".github/assets/social-preview.jpg" width="960" alt="PatchBlitz Runtimes: Pinned. Reproducible. Verified.">
+</p>
+
 Pinned, reproducible runtime archives bundled by the PatchBlitz Enterprise
 Windows setup. This repository holds only the build recipes and their
 published release artifacts; it contains no PatchBlitz product source.
