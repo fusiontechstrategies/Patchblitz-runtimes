@@ -45,7 +45,11 @@ param(
     [string[]] $NewSqliteDefaultOptions = @("MAX_SCHEMA=10000000"),
 
     [string] $ExpectedOpenSsl = "OpenSSL 3.5.9 29 Sep 2026",
-    [string] $ExpectedPip = "26.2.2"
+    [string] $ExpectedPip = "26.2.2",
+
+    [string] $VisualStudioInstallationVersion = "17.14.37824.6",
+    [string] $VCToolsVersion = "14.44.35207",
+    [string] $WindowsSdkVersion = "10.0.26100.0"
 )
 
 Set-StrictMode -Version Latest
@@ -165,9 +169,22 @@ $amalgamationDir = $amalgamation[0].DirectoryName
 
 # 3. Build sqlite3.dll with the exact feature set the upstream DLL reports, deterministically.
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-$vsPath = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Out-String).Trim()
-if (-not $vsPath) { Stop-Build "Visual Studio with the x64 C++ toolset is required." }
+if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) { Stop-Build "The pinned Visual Studio locator is required." }
+$vsInstances = @(& $vswhere -all -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -format json | ConvertFrom-Json)
+$vsMatches = @($vsInstances | Where-Object { $_.installationVersion -ceq $VisualStudioInstallationVersion })
+if ($vsMatches.Count -ne 1) {
+    Stop-Build "Exactly one Visual Studio installation at version $VisualStudioInstallationVersion is required."
+}
+$vsPath = [string]$vsMatches[0].installationPath
 $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
+$clPath = Join-Path $vsPath "VC\Tools\MSVC\$VCToolsVersion\bin\Hostx64\x64\cl.exe"
+$linkPath = Join-Path $vsPath "VC\Tools\MSVC\$VCToolsVersion\bin\Hostx64\x64\link.exe"
+$rcPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin\$WindowsSdkVersion\x64\rc.exe"
+foreach ($requiredTool in @($vcvars, $clPath, $linkPath, $rcPath)) {
+    if (-not (Test-Path -LiteralPath $requiredTool -PathType Leaf)) {
+        Stop-Build "Pinned toolchain file is missing: $requiredTool"
+    }
+}
 $parts = $SqliteVersion.Split('.')
 $rc = @"
 #include <winver.h>
@@ -205,12 +222,14 @@ $defines = @(
 ) | ForEach-Object { "/D`"$_`"" }
 $buildCmd = @(
     "set `"PATH=$(Split-Path -Parent $vswhere);%PATH%`"",
-    "call `"$vcvars`" >nul",
+    "call `"$vcvars`" -vcvars_ver=$VCToolsVersion -winsdk=$WindowsSdkVersion >nul",
+    "if not `"!VCToolsVersion!`"==`"$VCToolsVersion`" exit /b 86",
+    "if not `"!WindowsSDKVersion!`"==`"$WindowsSdkVersion\`" exit /b 87",
     "cd /d `"$amalgamationDir`"",
-    "rc.exe /nologo /fo sqlite3.res sqlite3.rc",
-    "cl.exe /nologo /O2 /GL /MD /W0 /Brepro /Zc:inline /guard:cf $($defines -join ' ') sqlite3.c sqlite3.res /LD /Fe:sqlite3.dll /link /LTCG /Brepro /OPT:REF /OPT:ICF /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA /GUARD:CF"
+    "`"$rcPath`" /nologo /fo sqlite3.res sqlite3.rc",
+    "`"$clPath`" /nologo /O2 /GL /MD /W0 /Brepro /Zc:inline /guard:cf $($defines -join ' ') sqlite3.c sqlite3.res /LD /Fe:sqlite3.dll /link /LTCG /Brepro /OPT:REF /OPT:ICF /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA /GUARD:CF"
 ) -join " && "
-& cmd.exe /d /s /c $buildCmd
+& cmd.exe /d /v:on /s /c $buildCmd
 if ($LASTEXITCODE -ne 0) { Stop-Build "SQLite build failed." }
 $builtSqlite = Join-Path $amalgamationDir "sqlite3.dll"
 Copy-Item -LiteralPath $builtSqlite -Destination (Join-Path $runtime "DLLs\sqlite3.dll") -Force
@@ -311,6 +330,7 @@ $asset = [ordered]@{
         stable_tree_sha256 = $tree.stable_tree_sha256
     }
     build_inputs = [ordered]@{
+        build_recipe_sha256 = Get-Sha256 $PSCommandPath
         python_build_standalone_release = $PbsRelease
         python_build_standalone_archive = $pbsName
         python_build_standalone_sha256 = $PbsArchiveSha256
@@ -319,6 +339,17 @@ $asset = [ordered]@{
         sqlite_amalgamation = "https://sqlite.org/$SqliteAmalgamationPath"
         sqlite_amalgamation_sha3_256 = $SqliteAmalgamationSha3_256
         sqlite3_dll_sha256 = Get-Sha256 $builtSqlite
+    }
+    toolchain = [ordered]@{
+        visual_studio_installation_version = $VisualStudioInstallationVersion
+        vc_tools_version = $VCToolsVersion
+        windows_sdk_version = $WindowsSdkVersion
+        cl_file_version = (Get-Item -LiteralPath $clPath).VersionInfo.FileVersion
+        cl_sha256 = Get-Sha256 $clPath
+        link_sha256 = Get-Sha256 $linkPath
+        rc_sha256 = Get-Sha256 $rcPath
+        powershell_version = $PSVersionTable.PSVersion.ToString()
+        operating_system = [Environment]::OSVersion.VersionString
     }
 }
 $receiptPath = "$archivePath.json"
