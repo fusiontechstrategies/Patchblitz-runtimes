@@ -4,6 +4,10 @@ Pinned, reproducible runtime archives bundled by the PatchBlitz Enterprise
 Windows setup. This repository holds only the build recipes and their
 published release artifacts; it contains no PatchBlitz product source.
 
+> **Repository status: supply-chain support only.** This is not a standalone PatchBlitz application, installer, SDK, or general-purpose Python distribution. End users should not add the archive to `PATH` or substitute it for a system Python installation. The PatchBlitz installer consumes an exact tag, filename, size, and digest from its private runtime lock.
+
+The parent product remains private. This public repository exists so customers and reviewers can inspect how the bundled runtime is assembled, which upstream components and licenses it contains, and whether a downloaded archive matches its published evidence.
+
 ## Python runtime
 
 Release tag: `patchblitz-python-3.14.9-openssl-3.5.9`
@@ -28,6 +32,22 @@ builds the archive. It:
 Building twice gives byte-identical archives. Requirements: PowerShell 7.4+
 and Visual Studio 2022 (or Build Tools) with the x64 C++ toolset.
 
+## Verify the published runtime
+
+The current [runtime release](https://github.com/fusiontechstrategies/Patchblitz-runtimes/releases/tag/patchblitz-python-3.14.9-openssl-3.5.9) contains three assets:
+
+- the deterministic Windows x64 runtime archive;
+- a JSON build record containing input and tree identities; and
+- `SHA256SUMS` for independent comparison.
+
+Treat the exact release tag and asset digest as one identity. Do not consume a moving "latest" URL, a GitHub-generated source archive, or a similarly named file from another location. The public assets are inputs to the separately guarded PatchBlitz installer; downloading an archive directly does not reproduce the installer's verification, destination protections, or product compatibility checks.
+
+## Update policy
+
+A runtime refresh requires a new versioned tag and a rebuilt evidence set. Before the private product lock can change, the archive must be rebuilt twice, match byte for byte, pass its identity and smoke checks, retain all required license texts, and be reviewed against the product's supported Windows and installer boundary. Older releases remain evidence for the product versions that pinned them.
+
+Report suspected build-script, archive-integrity, provenance, or secret-exposure problems through [SECURITY.md](SECURITY.md). General PatchBlitz product support and product-source requests are outside this repository.
+
 ## Licenses
 
 Each archive keeps the licenses of what it contains:
@@ -40,3 +60,5 @@ Each archive keeps the licenses of what it contains:
 The full upstream texts are in `python/licenses/`.
 
 The build recipe is Copyright (c) 2026 Fusion Technology Strategies, Inc.
+
+Explore the maintained applications and specialist utilities in the [Fusion Technology Strategies public portfolio](https://github.com/fusiontechstrategies/FusionTechStrategies).
