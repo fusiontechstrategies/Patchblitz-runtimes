@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recipe-contract:
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate pinned recipe and provenance contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scriptPath = 'scripts/Build-PatchBlitz-PythonRuntime.ps1'
+          $tokens = $null
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $scriptPath),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count) { throw "Build recipe has $($errors.Count) parse error(s)." }
+          $source = Get-Content -LiteralPath $scriptPath -Raw -Encoding utf8
+          if ($source -match '(?i)vswhere[^\r\n]*-latest') { throw 'The build recipe selects a moving Visual Studio installation.' }
+          foreach ($required in @(
+            'VisualStudioInstallationVersion',
+            'VCToolsVersion',
+            'WindowsSdkVersion',
+            'build_recipe_sha256',
+            'cl_sha256',
+            'link_sha256',
+            'rc_sha256'
+          )) {
+            if ($source -notmatch [regex]::Escape($required)) { throw "Missing provenance field: $required" }
+          }
+          if ($source -notmatch [regex]::Escape('/Brepro')) { throw 'The SQLite compiler invocation must retain /Brepro.' }
+          $readme = Get-Content -LiteralPath README.md -Raw -Encoding utf8
+          if ($readme -match 'Building twice gives byte-identical archives') { throw 'README contains an unconditional reproducibility claim.' }

@@ -29,15 +29,21 @@ builds the archive. It:
 5. Verifies the Python, OpenSSL, SQLite, and pip identities, and runs a smoke test.
 6. Writes a deterministic `tar.gz` and a JSON record of every input digest and the resulting tree identity.
 
-Building twice gives byte-identical archives. Requirements: PowerShell 7.4+
-and Visual Studio 2022 (or Build Tools) with the x64 C++ toolset.
+With the pinned inputs and exact toolchain identities recorded by the recipe,
+repeated builds on a matching Windows environment are intended to produce the
+same archive bytes. Always compare the resulting digest; cross-machine byte
+identity is not claimed when receipt toolchain identities differ. Requirements:
+PowerShell 7.4+, Visual Studio 2022 17.14.37824.6 with MSVC 14.44.35207, and
+Windows SDK 10.0.26100.0.
 
 ## Verify the published runtime
 
 The current [runtime release](https://github.com/fusiontechstrategies/Patchblitz-runtimes/releases/tag/patchblitz-python-3.14.9-openssl-3.5.9) contains three assets:
 
 - the deterministic Windows x64 runtime archive;
-- a JSON build record containing input and tree identities; and
+- a JSON build record containing the build-recipe digest, complete input and
+  tree identities, and exact Visual Studio, MSVC, Windows SDK, compiler, linker,
+  resource compiler, PowerShell, and operating-system identities; and
 - `SHA256SUMS` for independent comparison.
 
 Treat the exact release tag and asset digest as one identity. Do not consume a moving "latest" URL, a GitHub-generated source archive, or a similarly named file from another location. The public assets are inputs to the separately guarded PatchBlitz installer; downloading an archive directly does not reproduce the installer's verification, destination protections, or product compatibility checks.
